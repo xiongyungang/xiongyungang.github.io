@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GT7 Info 数据查看器</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2rem;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #333;
+    }
+    pre {
+      background-color: #f4f4f4;
+      padding: 1rem;
+      border-radius: 5px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .loading {
+      color: #666;
+      font-style: italic;
+    }
+    .error {
+      color: red;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>GT7 Info 数据</h1>
+  <div id="content">加载中...</div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const container = document.getElementById("content");
+      const url = "https://ddm999.github.io/gt7info/data.json";
+
+      fetch(url)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          // 格式化输出 JSON
+          container.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        })
+        .catch(error => {
+          container.className = "error";
+          container.textContent = `加载失败：${error.message}`;
+        });
+    });
+  </script>
+</body>
+</html>

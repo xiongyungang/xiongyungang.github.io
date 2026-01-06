@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GT7 车辆信息查看器</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2rem;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #333;
+    }
+    .search-box {
+      margin-bottom: 1rem;
+      padding: 0.5rem;
+      width: 100%;
+      max-width: 400px;
+      font-size: 1rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    th, td {
+      padding: 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    th {
+      background-color: #f4f4f4;
+      cursor: pointer;
+      user-select: none;
+    }
+    th:hover {
+      background-color: #eaeaea;
+    }
+    tr:hover {
+      background-color: #f9f9f9;
+    }
+    .loading, .error {
+      font-size: 1.1rem;
+      margin: 2rem 0;
+    }
+    .error {
+      color: red;
+    }
+    .sort-icon {
+      font-size: 0.8em;
+      margin-left: 0.3em;
+      color: #888;
+    }
+    .no-data {
+      text-align: center;
+      color: #666;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <h1>GT7 车辆信息（更新时间: <span id="update-time"></span>）</h1>
+
+  <input type="text" id="search-input" class="search-box" placeholder="输入车辆名称进行搜索..." />
+
+  <table id="cars-table">
+    <thead>
+      <tr>
+        <th data-key="name">名称 <span class="sort-icon">⇅</span></th>
+        <th data-key="credits">价格 <span class="sort-icon">⇅</span></th>
+        <th data-key="new">是否新上架 <span class="sort-icon">⇅</span></th>
+        <th data-key="daysLeft">剩余天数 <span class="sort-icon">⇅</span></th>
+        <th data-key="state">状态 <span class="sort-icon">⇅</span></th>
+      </tr>
+    </thead>
+    <tbody id="table-body">
+      <tr><td colspan="5" class="loading">加载中...</td></tr>
+    </tbody>
+  </table>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const updateSpan = document.getElementById("update-time");
+      const searchInput = document.getElementById("search-input");
+      const tableBody = document.getElementById("table-body");
+      const headers = document.querySelectorAll("th[data-key]");
+
+      let cars = [];
+      let filteredCars = [];
+      let currentSortKey = "name";
+      let currentSortOrder = 1; // 1: asc, -1: desc
+
+      // 状态映射
+      const stateMap = {
+        limited: "库存有限",
+        soldout: "售罄",
+        normal: "正常"
+      };
+
+      // 获取数据
+      fetch("https://ddm999.github.io/gt7info/data.json")
+        .then(response => {
+          if (!response.ok) throw new Error(`网络错误: ${response.status}`);
+          return response.json();
+        })
+        .then(data => {
+          updateSpan.textContent = data.updatetimestamp || "未知";
+
+          // 提取 cars 并添加计算字段
+          cars = data.legend?.cars.map(car => ({
+            ...car,
+            daysLeft: Math.max(0, car.maxestimatedays - 1) // 剩余天数 = maxestimatedays - 1，最小为0
+          })) || [];
+
+          filteredCars = [...cars];
+          renderTable();
+        })
+        .catch(error => {
+          tableBody.innerHTML = `<tr><td colspan="5" class="error">加载失败：${error.message}</td></tr>`;
+        });
+
+      // 渲染表格
+      function renderTable() {
+        if (filteredCars.length === 0) {
+          tableBody.innerHTML = `<tr><td colspan="5" class="no-data">未找到匹配的车辆</td></tr>`;
+          return;
+        }
+
+        tableBody.innerHTML = filteredCars.map(car => {
+          return `
+            <tr>
+              <td>${escapeHtml(car.name)}</td>
+              <td>${formatNumber(car.credits)}</td>
+              <td>${car.new ? '✅ 是' : '❌ 否'}</td>
+              <td>${car.daysLeft} 天</td>
+              <td>${stateMap[car.state] || car.state}</td>
+            </tr>
+          `;
+        }).join("");
+      }
+
+      // 转义 HTML 防止 XSS
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      // 格式化数字（千位分隔）
+      function formatNumber(num) {
+        return num.toLocaleString();
+      }
+
+      // 排序函数
+      function sortData(key) {
+        let order = 1;
+        if (currentSortKey === key) {
+          currentSortOrder *= -1;
+        } else {
+          currentSortOrder = 1;
+          currentSortKey = key;
+        }
+        order = currentSortOrder;
+
+        filteredCars.sort((a, b) => {
+          let valA = a[key];
+          let valB = b[key];
+
+          // 特殊处理布尔值
+          if (key === "new") {
+            valA = !!valA;
+            valB = !!valB;
+          }
+
+          // 字符串比较
+          if (typeof valA === "string") {
+            return valA.localeCompare(valB) * order;
+          }
+
+          // 数值或布尔值
+          if (valA < valB) return -1 * order;
+          if (valA > valB) return 1 * order;
+          return 0;
+        });
+
+        renderTable();
+      }
+
+      // 添加排序事件监听
+      headers.forEach(header => {
+        header.addEventListener("click", () => {
+          const key = header.dataset.key;
+          sortData(key);
+        });
+      });
+
+      // 搜索过滤
+      searchInput.addEventListener("input", () => {
+        const query = searchInput.value.trim().toLowerCase();
+        if (!query) {
+          filteredCars = [...cars];
+        } else {
+          filteredCars = cars.filter(car =>
+            car.name.toLowerCase().includes(query)
+          );
+        }
+        renderTable();
+      });
+    });
+  </script>
+</body>
+</html>

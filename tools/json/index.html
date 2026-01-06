@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>JSON 格式化工具</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f4f6f9;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    .container {
+      display: flex;
+      gap: 20px;
+      height: 70vh;
+    }
+    .panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    label {
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: #444;
+    }
+    textarea {
+      flex: 1;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 14px;
+      resize: none;
+      background-color: #fff;
+      box-shadow: inset 0 1px 4px rgba(0,0,0,0.1);
+    }
+    .controls {
+      margin-top: 15px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    button {
+      padding: 10px 16px;
+      background-color: #007cba;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: #005a87;
+    }
+    button#copyBtn {
+      background-color: #28a745;
+    }
+    button#copyBtn:hover {
+      background-color: #208637;
+    }
+    .status {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #d9534f;
+      min-height: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🔧 JSON 格式化工具</h1>
+
+  <div class="container">
+    <!-- 左侧面板 -->
+    <div class="panel">
+      <label for="inputJson">原始 JSON / 转义字符串：</label>
+      <textarea id="inputJson" placeholder="在此粘贴或输入需要处理的 JSON 数据（支持带转义符的字符串）"></textarea>
+      <div class="controls">
+        <button onclick="removeEscape()">去除转义符</button>
+        <button onclick="minifyJson()">压缩 JSON</button>
+        <button onclick="formatJson()">格式化 JSON</button>
+        <button onclick="clearAll()">清空</button>
+      </div>
+      <div id="statusLeft" class="status"></div>
+    </div>
+
+    <!-- 右侧面板 -->
+    <div class="panel">
+      <label for="outputJson">格式化结果：</label>
+      <textarea id="outputJson" readonly placeholder="格式化后的 JSON 将显示在这里..."></textarea>
+      <div class="controls">
+        <button id="copyBtn" onclick="copyResult()">📋 一键复制</button>
+      </div>
+      <div id="statusRight" class="status"></div>
+    </div>
+  </div>
+
+  <script>
+    // 实时格式化（可选：注释掉下面函数以关闭实时）
+    document.getElementById('inputJson').addEventListener('input', formatJson);
+
+    function formatJson() {
+      const input = document.getElementById('inputJson').value.trim();
+      const statusEl = document.getElementById('statusLeft');
+      const outputEl = document.getElementById('outputJson');
+      statusEl.textContent = '';
+      
+      if (!input) {
+        outputEl.value = '';
+        return;
+      }
+
+      try {
+        // 尝试直接解析原始输入
+        let data = JSON.parse(input);
+        outputEl.value = JSON.stringify(data, null, 2);
+      } catch (e1) {
+        try {
+          // 如果失败，尝试当作字符串去掉外层引号并解码转义
+          let cleaned = input;
+          if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+            cleaned = cleaned.slice(1, -1);
+          }
+          // 替换常见的转义符
+          cleaned = cleaned
+            .replace(/\\"/g, '"')
+            .replace(/\\\\/g, '\\')
+            .replace(/\\n/g, '\n')
+            .replace(/\\r/g, '\r')
+            .replace(/\\t/g, '\t')
+            .replace(/\\b/g, '\b')
+            .replace(/\\f/g, '\f')
+            // 注意：不能盲目 replace \/ -> /
+            ;
+
+          // 再次尝试解析
+          let data = JSON.parse(cleaned);
+          outputEl.value = JSON.stringify(data, null, 2);
+        } catch (e2) {
+          outputEl.value = '';
+          statusEl.textContent = '❌ JSON 解析错误：' + e2.message;
+        }
+      }
+    }
+
+    // 去除转义符（把带双引号包裹的转义字符串变成原始 JSON）
+    function removeEscape() {
+      const input = document.getElementById('inputJson').value.trim();
+      if (!input) return;
+
+      let result = input;
+      try {
+        // 先尝试作为字符串去转义
+        if (result.startsWith('"') && result.endsWith('"')) {
+          result = result.slice(1, -1);
+        }
+        result = result
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, '\\')
+          .replace(/\\n/g, '\n')
+          .replace(/\\r/g, '\r')
+          .replace(/\\t/g, '\t')
+          .replace(/\\b/g, '\b')
+          .replace(/\\f/g, '\f');
+
+        document.getElementById('inputJson').value = result;
+        formatJson(); // 自动格式化
+      } catch (e) {
+        document.getElementById('statusLeft').textContent = '❌ 转义处理失败：' + e.message;
+      }
+    }
+
+    // 压缩 JSON（格式化后再压缩成一行）
+    function minifyJson() {
+      const input = document.getElementById('inputJson').value.trim();
+      const outputEl = document.getElementById('outputJson');
+      const statusEl = document.getElementById('statusLeft');
+      statusEl.textContent = '';
+
+      if (!input) {
+        outputEl.value = '';
+        return;
+      }
+
+      try {
+        let data = JSON.parse(input);
+        outputEl.value = JSON.stringify(data); // 压缩无空格
+      } catch (e1) {
+        try {
+          let cleaned = input;
+          if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+            cleaned = cleaned.slice(1, -1);
+          }
+          cleaned = cleaned
+            .replace(/\\"/g, '"')
+            .replace(/\\\\/g, '\\')
+            .replace(/\\n/g, '\n')
+            .replace(/\\r/g, '\r')
+            .replace(/\\t/g, '\t');
+
+          let data = JSON.parse(cleaned);
+          outputEl.value = JSON.stringify(data);
+        } catch (e2) {
+          outputEl.value = '';
+          statusEl.textContent = '❌ 压缩失败：无法解析 JSON';
+        }
+      }
+    }
+
+    // 一键复制
+    function copyResult() {
+      const output = document.getElementById('outputJson');
+      if (!output.value) {
+        alert('没有内容可复制！');
+        return;
+      }
+      output.select();
+      document.execCommand('copy');
+      document.getElementById('statusRight').textContent = '✅ 已复制到剪贴板！';
+      setTimeout(() => {
+        document.getElementById('statusRight').textContent = '';
+      }, 2000);
+    }
+
+    // 清空所有
+    function clearAll() {
+      document.getElementById('inputJson').value = '';
+      document.getElementById('outputJson').value = '';
+      document.getElementById('statusLeft').textContent = '';
+      document.getElementById('statusRight').textContent = '';
+    }
+  </script>
+
+</body>
+</html>

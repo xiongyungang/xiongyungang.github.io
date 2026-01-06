@@ -270,7 +270,7 @@
       // 谷歌搜索按钮
       googleSearchBtn.addEventListener("click", () => {
         if (!currentCar) return;
-        const query = encodeURIComponent(`${currentCar.name} ${currentCar.manufacturer} Gran Turismo 7`);
+        const query = encodeURIComponent(`${currentCar.manufacturer} ${currentCar.name}`);
         const url = `https://www.google.com/search?q=${query}`;
         window.open(url, "_blank");
       });

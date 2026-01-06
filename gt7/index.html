@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>GT7 车辆信息查看器</title>
+  <title>GT7 legend</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -63,11 +63,12 @@
 <body>
   <h1>GT7 车辆信息（更新时间: <span id="update-time"></span>）</h1>
 
-  <input type="text" id="search-input" class="search-box" placeholder="输入车辆名称进行搜索..." />
+  <input type="text" id="search-input" class="search-box" placeholder="输入车厂或车辆名称进行搜索..." />
 
   <table id="cars-table">
     <thead>
       <tr>
+        <th data-key="manufacturer">车厂 <span class="sort-icon">⇅</span></th>
         <th data-key="name">名称 <span class="sort-icon">⇅</span></th>
         <th data-key="credits">价格 <span class="sort-icon">⇅</span></th>
         <th data-key="new">是否新上架 <span class="sort-icon">⇅</span></th>
@@ -76,7 +77,7 @@
       </tr>
     </thead>
     <tbody id="table-body">
-      <tr><td colspan="5" class="loading">加载中...</td></tr>
+      <tr><td colspan="6" class="loading">加载中...</td></tr>
     </tbody>
   </table>
 
@@ -118,19 +119,20 @@
           renderTable();
         })
         .catch(error => {
-          tableBody.innerHTML = `<tr><td colspan="5" class="error">加载失败：${error.message}</td></tr>`;
+          tableBody.innerHTML = `<tr><td colspan="6" class="error">加载失败：${error.message}</td></tr>`;
         });
 
       // 渲染表格
       function renderTable() {
         if (filteredCars.length === 0) {
-          tableBody.innerHTML = `<tr><td colspan="5" class="no-data">未找到匹配的车辆</td></tr>`;
+          tableBody.innerHTML = `<tr><td colspan="6" class="no-data">未找到匹配的车辆</td></tr>`;
           return;
         }
 
         tableBody.innerHTML = filteredCars.map(car => {
           return `
             <tr>
+              <td>${escapeHtml(car.manufacturer)}</td>
               <td>${escapeHtml(car.name)}</td>
               <td>${formatNumber(car.credits)}</td>
               <td>${car.new ? '✅ 是' : '❌ 否'}</td>
@@ -155,14 +157,14 @@
 
       // 排序函数
       function sortData(key) {
-        let order = 1;
         if (currentSortKey === key) {
           currentSortOrder *= -1;
         } else {
           currentSortOrder = 1;
           currentSortKey = key;
         }
-        order = currentSortOrder;
+
+        const order = currentSortOrder;
 
         filteredCars.sort((a, b) => {
           let valA = a[key];
@@ -196,14 +198,15 @@
         });
       });
 
-      // 搜索过滤
+      // 搜索过滤 —— 支持「车厂」和「名称」
       searchInput.addEventListener("input", () => {
         const query = searchInput.value.trim().toLowerCase();
         if (!query) {
           filteredCars = [...cars];
         } else {
           filteredCars = cars.filter(car =>
-            car.name.toLowerCase().includes(query)
+            car.name.toLowerCase().includes(query) ||
+            car.manufacturer.toLowerCase().includes(query)
           );
         }
         renderTable();

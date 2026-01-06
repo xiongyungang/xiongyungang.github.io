@@ -40,6 +40,7 @@
     }
     tr:hover {
       background-color: #f9f9f9;
+      cursor: pointer;
     }
     .loading, .error {
       font-size: 1.1rem;
@@ -58,10 +59,63 @@
       color: #666;
       font-style: italic;
     }
+
+    /* Dialog 样式 */
+    dialog {
+      border: none;
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      padding: 1.5rem;
+      width: 90%;
+      max-width: 500px;
+    }
+    dialog h2 {
+      margin-top: 0;
+      color: #2c3e50;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 0.5rem;
+    }
+    dialog .detail-row {
+      display: flex;
+      margin-bottom: 0.7rem;
+      font-size: 1rem;
+    }
+    dialog .detail-label {
+      font-weight: bold;
+      width: 120px;
+      color: #555;
+    }
+    dialog .detail-value {
+      flex: 1;
+      color: #333;
+    }
+    dialog .btn-group {
+      text-align: right;
+      margin-top: 1rem;
+    }
+    dialog button {
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      cursor: pointer;
+      background-color: #007cba;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    dialog button:hover {
+      background-color: #005a87;
+    }
+    dialog button.close {
+      background-color: #95a5a6;
+      margin-left: 0.5rem;
+    }
+    dialog button.close:hover {
+      background-color: #7f8c8d;
+    }
   </style>
 </head>
 <body>
-  <h1>GT7 车辆信息（更新时间: <span id="update-time"></span>）</h1>
+  <h1>GT7 legend（更新时间: <span id="update-time"></span>）</h1>
 
   <input type="text" id="search-input" class="search-box" placeholder="输入车厂或车辆名称进行搜索..." />
 
@@ -81,6 +135,16 @@
     </tbody>
   </table>
 
+  <!-- 详细信息弹窗 -->
+  <dialog id="detail-modal">
+    <h2>车辆详情</h2>
+    <div id="modal-content"></div>
+    <div class="btn-group">
+      <button id="google-search-btn">谷歌搜索</button>
+      <button class="close" id="close-modal">关闭</button>
+    </div>
+  </dialog>
+
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       const updateSpan = document.getElementById("update-time");
@@ -88,10 +152,18 @@
       const tableBody = document.getElementById("table-body");
       const headers = document.querySelectorAll("th[data-key]");
 
+      const modal = document.getElementById("detail-modal");
+      const modalContent = document.getElementById("modal-content");
+      const googleSearchBtn = document.getElementById("google-search-btn");
+      const closeModalBtn = document.getElementById("close-modal");
+
       let cars = [];
       let filteredCars = [];
       let currentSortKey = "name";
-      let currentSortOrder = 1; // 1: asc, -1: desc
+      let currentSortOrder = 1;
+
+      // 当前选中的车辆
+      let currentCar = null;
 
       // 状态映射
       const stateMap = {
@@ -99,6 +171,25 @@
         soldout: "售罄",
         normal: "正常"
       };
+
+      // 国家区域映射（region）
+      const regionMap = {
+        jp: "日本",
+        us: "美国",
+        de: "德国",
+        it: "意大利",
+        fr: "法国",
+        gb: "英国",
+        kr: "韩国",
+        ch: "瑞士",
+        se: "瑞典",
+        cn: "中国",
+        default: "其他"
+      };
+
+      function getRegionName(region) {
+        return regionMap[region] || regionMap.default;
+      }
 
       // 获取数据
       fetch("https://ddm999.github.io/gt7info/data.json")
@@ -112,7 +203,7 @@
           // 提取 cars 并添加计算字段
           cars = data.legend?.cars.map(car => ({
             ...car,
-            daysLeft: Math.max(0, car.maxestimatedays - 1) // 剩余天数 = maxestimatedays - 1，最小为0
+            daysLeft: Math.max(0, car.maxestimatedays - 1)
           })) || [];
 
           filteredCars = [...cars];
@@ -129,19 +220,72 @@
           return;
         }
 
-        tableBody.innerHTML = filteredCars.map(car => {
-          return `
-            <tr>
-              <td>${escapeHtml(car.manufacturer)}</td>
-              <td>${escapeHtml(car.name)}</td>
-              <td>${formatNumber(car.credits)}</td>
-              <td>${car.new ? '✅ 是' : '❌ 否'}</td>
-              <td>${car.daysLeft} 天</td>
-              <td>${stateMap[car.state] || car.state}</td>
-            </tr>
+        tableBody.innerHTML = "";
+        filteredCars.forEach(car => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${escapeHtml(car.manufacturer)}</td>
+            <td>${escapeHtml(car.name)}</td>
+            <td>${formatNumber(car.credits)}</td>
+            <td>${car.new ? '✅ 是' : '❌ 否'}</td>
+            <td>${car.daysLeft} 天</td>
+            <td>${stateMap[car.state] || car.state}</td>
           `;
-        }).join("");
+          row.addEventListener("click", () => showDetail(car));
+          tableBody.appendChild(row);
+        });
       }
+
+      // 显示详细信息
+      function showDetail(car) {
+        currentCar = car;
+
+        const regionName = getRegionName(car.region);
+
+        // 引擎改装信息
+        let engineSwapText = "无";
+        if (car.engineswap) {
+          engineSwapText = `${car.engineswap.name} (${car.engineswap.enginename})`;
+        }
+
+        // 奖励车
+        let rewardCarText = car.rewardcar ? car.rewardcar : "无";
+
+        // 构建详情内容
+        modalContent.innerHTML = `
+          <div class="detail-row"><span class="detail-label">名称：</span><span class="detail-value">${escapeHtml(car.name)}</span></div>
+          <div class="detail-row"><span class="detail-label">厂牌：</span><span class="detail-value">${escapeHtml(car.manufacturer)}</span></div>
+          <div class="detail-row"><span class="detail-label">国家：</span><span class="detail-value">${regionName}</span></div>
+          <div class="detail-row"><span class="detail-label">价格：</span><span class="detail-value">${formatNumber(car.credits)} CR</span></div>
+          <div class="detail-row"><span class="detail-label">是否新上架：</span><span class="detail-value">${car.new ? '✅ 是' : '❌ 否'}</span></div>
+          <div class="detail-row"><span class="detail-label">剩余天数：</span><span class="detail-value">${car.daysLeft} 天</span></div>
+          <div class="detail-row"><span class="detail-label">状态：</span><span class="detail-value">${stateMap[car.state] || car.state}</span></div>
+          <div class="detail-row"><span class="detail-label">引擎改装：</span><span class="detail-value">${escapeHtml(engineSwapText)}</span></div>
+          <div class="detail-row"><span class="detail-label">奖励车：</span><span class="detail-value">${escapeHtml(rewardCarText)}</span></div>
+        `;
+
+        modal.showModal();
+      }
+
+      // 谷歌搜索按钮
+      googleSearchBtn.addEventListener("click", () => {
+        if (!currentCar) return;
+        const query = encodeURIComponent(`${currentCar.name} ${currentCar.manufacturer} Gran Turismo 7`);
+        const url = `https://www.google.com/search?q=${query}`;
+        window.open(url, "_blank");
+      });
+
+      // 关闭弹窗
+      closeModalBtn.addEventListener("click", () => {
+        modal.close();
+      });
+
+      // 点击遮罩外也可关闭（可选）
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) {
+          modal.close();
+        }
+      });
 
       // 转义 HTML 防止 XSS
       function escapeHtml(text) {
@@ -170,18 +314,15 @@
           let valA = a[key];
           let valB = b[key];
 
-          // 特殊处理布尔值
           if (key === "new") {
             valA = !!valA;
             valB = !!valB;
           }
 
-          // 字符串比较
           if (typeof valA === "string") {
             return valA.localeCompare(valB) * order;
           }
 
-          // 数值或布尔值
           if (valA < valB) return -1 * order;
           if (valA > valB) return 1 * order;
           return 0;

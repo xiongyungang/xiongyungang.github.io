@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MyBatis SQL 合并工具</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f7f9fc;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      color: #2c3e50;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      gap: 20px;
+      height: 70vh;
+    }
+    .panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    label {
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: #444;
+    }
+    textarea {
+      flex: 1;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 14px;
+      resize: none;
+      background-color: #fff;
+      box-shadow: inset 0 1px 4px rgba(0,0,0,0.1);
+      font-family: 'Courier New', Courier, monospace;
+    }
+    button {
+      padding: 10px 16px;
+      background-color: #007cba;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-top: 10px;
+      transition: background-color 0.2s;
+    }
+    button#copyBtn {
+      background-color: #28a745;
+    }
+    button:hover {
+      opacity: 0.9;
+    }
+    .status {
+      margin-top: 10px;
+      min-height: 20px;
+      font-size: 14px;
+      color: #d9534f;
+    }
+    .success {
+      color: #28a745;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🔍 MyBatis SQL 参数合并工具</h1>
+  <p style="text-align:center;color:#666;">将 SSM 项目中 MyBatis 控制台输出的 SQL 和 Parameters 自动合并成完整 SQL</p>
+
+  <div class="container">
+    <!-- 输入面板 -->
+    <div class="panel">
+      <label for="inputLog">粘贴两行日志：</label>
+      <textarea id="inputLog" placeholder="请粘贴以下格式的日志：
+Preparing: SELECT * FROM user WHERE id = ? AND name = ? AND create_time > ?
+Parameters: 123(Long), 张三(String), 2024-01-01 00:00:00(Timestamp)"></textarea>
+      <button onclick="processSql()">✅ 自动生成 SQL</button>
+      <div id="statusLeft" class="status"></div>
+    </div>
+
+    <!-- 输出面板 -->
+    <div class="panel">
+      <label for="outputSql">完整 SQL：</label>
+      <textarea id="outputSql" readonly placeholder="合并后的 SQL 将显示在这里..."></textarea>
+      <button id="copyBtn" onclick="copyResult()">📋 一键复制</button>
+      <div id="statusRight" class="status"></div>
+    </div>
+  </div>
+
+  <script>
+    // 实时处理（可选）
+    document.getElementById('inputLog').addEventListener('input', function () {
+      if (this.value.split('\n').filter(line => line.trim()).length >= 2) {
+        processSql();
+      }
+    });
+
+    function processSql() {
+      const input = document.getElementById('inputLog').value;
+      const statusEl = document.getElementById('statusLeft');
+      const outputEl = document.getElementById('outputSql');
+      statusEl.textContent = '';
+      outputEl.value = '';
+
+      const lines = input.split('\n').map(line => line.trim()).filter(line => line);
+
+      if (lines.length < 2) {
+        statusEl.textContent = '⚠️ 请输入至少两行日志：SQL 和 Parameters';
+        return;
+      }
+
+      const sqlLine = lines[0];
+      const paramsLine = lines[1];
+
+      let sqlMatch = sqlLine.match(/Preparing: (.+)/i);
+      if (!sqlMatch) {
+        statusEl.textContent = '❌ 第一行必须以 "Preparing: " 开头';
+        return;
+      }
+      let sql = sqlMatch[1].trim();
+
+      let paramsMatch = paramsLine.match(/Parameters: (.+)/i);
+      if (!paramsMatch) {
+        statusEl.textContent = '❌ 第二行必须以 "Parameters: " 开头';
+        return;
+      }
+      let rawParams = paramsMatch[1].trim();
+
+      // 解析参数列表（支持逗号分隔，处理带括号类型）
+      // 示例：123(Long), abc(String), null, "hello, world"(String)
+      let params = [];
+      let temp = "";
+      let inQuotes = false;
+
+      for (let char of rawParams) {
+        if (char === '"') {
+          inQuotes = !inQuotes;
+          temp += char;
+        } else if (char === ',' && !inQuotes) {
+          params.push(temp.trim());
+          temp = "";
+        } else {
+          temp += char;
+        }
+      }
+      if (temp.trim()) params.push(temp.trim());
+
+      // 提取每个参数的值和类型
+      const parsedParams = params.map(p => {
+        const match = p.match(/^(.+)$$([^)]+)$$$/); // 如 abc(String)
+        if (match) {
+          let val = match[1].trim();
+          const type = match[2].trim();
+
+          if (val.toLowerCase() === 'null') {
+            return { value: null, type };
+          }
+
+          // 去除包裹的双引号（如果是字符串）
+          if (val.startsWith('"') && val.endsWith('"')) {
+            val = val.slice(1, -1);
+          }
+          return { value: val, type };
+        } else {
+          // 无法解析类型，默认当字符串处理
+          if (p.toLowerCase() === 'null') {
+            return { value: null, type: 'Object' };
+          }
+          return { value: p, type: 'String' };
+        }
+      });
+
+      // 替换 SQL 中的每一个 ? 为实际值
+      let finalSql = sql;
+      let index = 0;
+      const paramValues = parsedParams.map(p => formatValue(p.value, p.type));
+
+      while (finalSql.includes('?') && index < paramValues.length) {
+        const val = paramValues[index++];
+        finalSql = replaceFirst(finalSql, '?', val);
+      }
+
+      if (index < paramValues.length) {
+        statusEl.textContent = `⚠️ 警告：有多余参数未使用（${paramValues.length - index} 个）`;
+      } else if (finalSql.includes('?')) {
+        statusEl.textContent = `⚠️ 警告：SQL 中仍有未替换的 ?（缺少参数）`;
+      } else {
+        statusEl.innerHTML = `✅ 成功替换 ${index} 个参数`;
+        statusEl.className = 'status success';
+      }
+
+      outputEl.value = formatFinalSql(finalSql);
+    }
+
+    // 辅助函数：替换第一个出现的子串
+    function replaceFirst(str, search, replacement) {
+      const idx = str.indexOf(search);
+      if (idx === -1) return str;
+      return str.substring(0, idx) + replacement + str.substring(idx + search.length);
+    }
+
+    // 格式化单个值（根据类型决定是否加引号）
+    function formatValue(value, type) {
+      if (value === null) return 'NULL';
+
+      type = type.toLowerCase();
+
+      const numberTypes = ['int', 'integer', 'long', 'double', 'float', 'decimal', 'number'];
+      const dateTypes = ['timestamp', 'datetime', 'date', 'time'];
+
+      if (numberTypes.some(t => type.includes(t))) {
+        return String(value);
+      } else if (dateTypes.some(t => type.includes(t))) {
+        return `'${value}'`;
+      } else {
+        // 字符串或其他类型，加引号并转义单引号
+        return `'${String(value).replace(/'/g, "''")}'`;
+      }
+    }
+
+    // 简单美化 SQL（大写关键字）
+    function formatFinalSql(sql) {
+      return sql
+        .replace(/\bSELECT\b/gi, 'SELECT')
+        .replace(/\bFROM\b/gi, 'FROM')
+        .replace(/\bWHERE\b/gi, 'WHERE')
+        .replace(/\bAND\b/gi, 'AND')
+        .replace(/\bOR\b/gi, 'OR')
+        .replace(/\bINSERT\b/gi, 'INSERT')
+        .replace(/\bUPDATE\b/gi, 'UPDATE')
+        .replace(/\bDELETE\b/gi, 'DELETE')
+        .replace(/\bVALUES\b/gi, 'VALUES')
+        .replace(/\bORDER BY\b/gi, 'ORDER BY')
+        .replace(/\bGROUP BY\b/gi, 'GROUP BY')
+        .replace(/\bHAVING\b/gi, 'HAVING')
+        .replace(/\bJOIN\b/gi, 'JOIN')
+        .replace(/\bON\b/gi, 'ON');
+    }
+
+    // 复制结果
+    function copyResult() {
+      const output = document.getElementById('outputSql');
+      if (!output.value) {
+        alert('没有可复制的内容！');
+        return;
+      }
+      output.select();
+      document.execCommand('copy');
+      const statusEl = document.getElementById('statusRight');
+      statusEl.textContent = '✅ 已复制到剪贴板！';
+      statusEl.className = 'status success';
+      setTimeout(() => {
+        statusEl.textContent = '';
+      }, 2000);
+    }
+  </script>
+
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Tools 索引 — /tools</title>
+  <title>Tools index</title>
   <style>
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;margin:0;padding:24px;background:#f7f8fa;color:#111}
     header{display:flex;align-items:center;gap:12px}
@@ -24,8 +24,7 @@
 </head>
 <body>
   <header>
-    <h1>/tools 索引</h1>
-    <div class="pill">自动检测子目录的 index.html</div>
+    <h1>/tools</h1>
   </header>
 
   <div class="controls">
@@ -36,10 +35,6 @@
   </div>
 
   <ul id="list" class="list" aria-live="polite"></ul>
-
-  <div class="footer">
-    注：此页面使用 GitHub REST API 列出仓库 /tools 下的一级目录并检查每个目录是否存在 index.html。若仓库为私有或遇到速率限制，请在 URL 上附加 ?token=YOUR_GITHUB_TOKEN（不推荐将长期有效 token 暴露在公共场合）。
-  </div>
 
   <script>
     (function(){
@@ -135,14 +130,14 @@
             r.right.innerHTML = '';
             r.right.appendChild(a);
             // add small raw link
-            const raw = document.createElement('a');
-            raw.className = 'small';
-            raw.style.marginLeft = '8px';
-            raw.href = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${branch}/${TOOLS_PATH}/${encodeURIComponent(r.name)}/index.html`;
-            raw.target = '_blank';
-            raw.rel = 'noopener';
-            raw.textContent = 'raw';
-            r.right.appendChild(raw);
+            // const raw = document.createElement('a');
+            // raw.className = 'small';
+            // raw.style.marginLeft = '8px';
+            // raw.href = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${branch}/${TOOLS_PATH}/${encodeURIComponent(r.name)}/index.html`;
+            // raw.target = '_blank';
+            // raw.rel = 'noopener';
+            // raw.textContent = 'raw';
+            // r.right.appendChild(raw);
           }else{
             r.right.innerHTML = '<span class="missing">未找到 index.html</span>';
           }

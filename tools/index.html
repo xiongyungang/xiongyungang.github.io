@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tools 索引 — /tools</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;margin:0;padding:24px;background:#f7f8fa;color:#111}
+    header{display:flex;align-items:center;gap:12px}
+    h1{margin:0;font-size:1.3rem}
+    .controls{margin:16px 0;display:flex;gap:8px;flex-wrap:wrap}
+    input[type="search"]{padding:8px;border-radius:6px;border:1px solid #d0d7de;min-width:240px}
+    button{padding:8px 12px;border-radius:6px;border:1px solid #d0d7de;background:#fff;cursor:pointer}
+    #status{color:#6b7280;font-size:0.9rem;margin-top:8px}
+    ul.list{list-style:none;padding:0;margin:18px 0 0 0;display:flex;flex-direction:column;gap:8px}
+    li.item{background:#fff;padding:12px;border-radius:8px;border:1px solid #e6e9ee;display:flex;justify-content:space-between;align-items:center}
+    a.link{color:#0366d6;text-decoration:none;font-weight:600}
+    .muted{color:#6b7280;font-size:0.9rem}
+    .small{font-size:0.85rem;color:#6b7280}
+    .pill{padding:4px 8px;border-radius:999px;background:#eef2ff;color:#3730a3;font-weight:600;font-size:0.8rem}
+    .missing{color:#9ca3af;font-style:italic}
+    .footer{margin-top:20px;color:#6b7280;font-size:0.9rem}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>/tools 索引</h1>
+    <div class="pill">自动检测子目录的 index.html</div>
+  </header>
+
+  <div class="controls">
+    <input id="q" type="search" placeholder="筛选目录（输入关键字）" />
+    <button id="refresh">刷新</button>
+    <button id="openRaw" title="在 raw.githubusercontent.com 打开原始文件">查看原始 (raw)</button>
+    <div id="status" aria-live="polite"></div>
+  </div>
+
+  <ul id="list" class="list" aria-live="polite"></ul>
+
+  <div class="footer">
+    注：此页面使用 GitHub REST API 列出仓库 /tools 下的一级目录并检查每个目录是否存在 index.html。若仓库为私有或遇到速率限制，请在 URL 上附加 ?token=YOUR_GITHUB_TOKEN（不推荐将长期有效 token 暴露在公共场合）。
+  </div>
+
+  <script>
+    (function(){
+      // 配置：仓库信息（来自你的输入）
+      const OWNER = 'xiongyungang';
+      const REPO = 'xiongyungang.github.io';
+      const TOOLS_PATH = 'tools';
+
+      // DOM
+      const statusEl = document.getElementById('status');
+      const listEl = document.getElementById('list');
+      const qInput = document.getElementById('q');
+      const refreshBtn = document.getElementById('refresh');
+      const openRawBtn = document.getElementById('openRaw');
+
+      // 取可选 token（通过 URL ?token=... 传入以提升速率限制；注意安全风险）
+      const urlParams = new URLSearchParams(location.search);
+      const TOKEN = urlParams.get('token') || '';
+
+      function setStatus(s){
+        statusEl.textContent = s || '';
+      }
+
+      async function getDefaultBranch(){
+        const url = `https://api.github.com/repos/${OWNER}/${REPO}`;
+        const res = await fetch(url, apiHeaders());
+        if(!res.ok) throw new Error('无法获取仓库信息: ' + res.status);
+        const j = await res.json();
+        return j.default_branch || 'main';
+      }
+
+      function apiHeaders(){
+        return {
+          headers: TOKEN ? { Authorization: 'token ' + TOKEN, Accept: 'application/vnd.github.v3+json' } : { Accept: 'application/vnd.github.v3+json' },
+          cache: 'no-cache'
+        };
+      }
+
+      async function listToolsDirs(branch){
+        const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${TOOLS_PATH}?ref=${branch}`;
+        const res = await fetch(url, apiHeaders());
+        if(res.status === 404) throw new Error('/tools 目录不存在（或路径错误）');
+        if(!res.ok) throw new Error('无法列出 /tools: ' + res.status);
+        return await res.json(); // array of items
+      }
+
+      // 检查 index.html 是否存在（使用 raw.githubusercontent.com 以便直接检查）
+      async function indexExists(branch, dirName){
+        const rawUrl = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${branch}/${TOOLS_PATH}/${encodeURIComponent(dirName)}/index.html`;
+        try{
+          const r = await fetch(rawUrl, { method: 'HEAD', cache: 'no-cache' });
+          return r.ok;
+        }catch(e){
+          return false;
+        }
+      }
+
+      function renderItems(items, branch){
+        listEl.innerHTML = '';
+        const rows = items.map(it => {
+          const name = it.name;
+          const isDir = it.type === 'dir';
+          const li = document.createElement('li');
+          li.className = 'item';
+          const left = document.createElement('div');
+          const right = document.createElement('div');
+
+          left.innerHTML = `<div><strong>${escapeHtml(name)}</strong> <span class="small">(${escapeHtml(it.type)})</span></div>`;
+          right.className = 'small';
+          right.textContent = '检测中...';
+          li.appendChild(left);
+          li.appendChild(right);
+
+          return { name, isDir, li, right };
+        });
+
+        rows.forEach(r => listEl.appendChild(r.li));
+
+        // 并发检测每个目录的 index.html（只对 type === dir）
+        const checks = rows.map(async r => {
+          if(!r.isDir){
+            r.right.innerHTML = '<span class="missing">不是目录，已跳过</span>';
+            return null;
+          }
+          const exists = await indexExists(branch, r.name);
+          if(exists){
+            // 相对链接到站点内的 index.html
+            const a = document.createElement('a');
+            a.className = 'link';
+            // 使用相对绝对路径 /tools/<dir>/index.html，这样在 GitHub Pages 上可直接打开
+            a.href = `/${TOOLS_PATH}/${encodeURIComponent(r.name)}/index.html`;
+            a.textContent = `/tools/${r.name}/index.html`;
+            r.right.innerHTML = '';
+            r.right.appendChild(a);
+            // add small raw link
+            const raw = document.createElement('a');
+            raw.className = 'small';
+            raw.style.marginLeft = '8px';
+            raw.href = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${branch}/${TOOLS_PATH}/${encodeURIComponent(r.name)}/index.html`;
+            raw.target = '_blank';
+            raw.rel = 'noopener';
+            raw.textContent = 'raw';
+            r.right.appendChild(raw);
+          }else{
+            r.right.innerHTML = '<span class="missing">未找到 index.html</span>';
+          }
+        });
+
+        return Promise.all(checks);
+      }
+
+      // 过滤列表
+      function applyFilter(){
+        const q = qInput.value.trim().toLowerCase();
+        for(const li of listEl.children){
+          const name = li.querySelector('strong')?.textContent?.toLowerCase() || '';
+          li.style.display = (!q || name.includes(q)) ? '' : 'none';
+        }
+      }
+
+      async function refresh(){
+        try{
+          setStatus('加载仓库信息...');
+          const branch = await getDefaultBranch();
+          setStatus(`默认分支：${branch}，正在读取 /${TOOLS_PATH} 下的条目...`);
+          const items = await listToolsDirs(branch);
+          // 过滤到只保留一级目录（type === 'dir'），但先把所有显示出来并逐项检测
+          const top = items.filter(i => i.type === 'dir' || i.type === 'file');
+          setStatus(`找到 ${top.length} 个条目，正在检测子目录中是否存在 index.html（并行检测）...`);
+          await renderItems(top, branch);
+          setStatus(`完成 — 显示 ${top.length} 个条目。最后刷新：${new Date().toLocaleString()}`);
+        }catch(err){
+          console.error(err);
+          setStatus('错误：' + (err && err.message ? err.message : String(err)));
+          listEl.innerHTML = '';
+        }
+      }
+
+      // small helper
+      function escapeHtml(s){ return (s+'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+
+      // events
+      qInput.addEventListener('input', applyFilter);
+      refreshBtn.addEventListener('click', () => { refresh(); });
+      openRawBtn.addEventListener('click', () => {
+        // 打开 tools 目录的 raw 列表（使用 GitHub 页面，不是 API）
+        const url = `https://github.com/${OWNER}/${REPO}/tree/`;
+        window.open(url, '_blank');
+      });
+
+      // 初始加载
+      refresh();
+
+      // 可选：自动刷新（如需启用，取消下面注释）
+      // setInterval(refresh, 1000 * 60 * 5); // 5 分钟自动刷新
+
+    })();
+  </script>
+</body>
+</html>

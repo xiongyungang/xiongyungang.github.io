@@ -47,7 +47,7 @@
       const listEl = document.getElementById('list');
       const qInput = document.getElementById('q');
       const refreshBtn = document.getElementById('refresh');
-      const openRawBtn = document.getElementById('openRaw');
+      //const openRawBtn = document.getElementById('openRaw');
 
       // 取可选 token（通过 URL ?token=... 传入以提升速率限制；注意安全风险）
       const urlParams = new URLSearchParams(location.search);
@@ -178,11 +178,11 @@
       // events
       qInput.addEventListener('input', applyFilter);
       refreshBtn.addEventListener('click', () => { refresh(); });
-      openRawBtn.addEventListener('click', () => {
-        // 打开 tools 目录的 raw 列表（使用 GitHub 页面，不是 API）
-        const url = `https://github.com/${OWNER}/${REPO}/tree/`;
-        window.open(url, '_blank');
-      });
+      // openRawBtn.addEventListener('click', () => {
+      //   // 打开 tools 目录的 raw 列表（使用 GitHub 页面，不是 API）
+      //   const url = `https://github.com/${OWNER}/${REPO}/tree/`;
+      //   window.open(url, '_blank');
+      // });
 
       // 初始加载
       refresh();

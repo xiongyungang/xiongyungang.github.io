@@ -1,4 +1,4 @@
-const OWNER = "你的GitHub用户名";
+const OWNER = "xiongyungang";
 const REPO = "blog-data";
 
 // 博客列表

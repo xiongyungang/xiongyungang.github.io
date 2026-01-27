@@ -36,3 +36,8 @@ async function loadPost() {
   document.getElementById("content").innerHTML =
     marked.parse(issue.body);
 }
+
+
+document.getElementById("meta").innerText =
+  `发布于 ${issue.created_at.slice(0, 10)}`;
+

@@ -1,5 +1,5 @@
 const OWNER = "xiongyungang";
-const REPO = "blog-data";
+const REPO = "xiongyungang.github.io";
 
 // 博客列表
 async function loadPosts() {

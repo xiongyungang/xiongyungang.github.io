@@ -156,7 +156,7 @@ Parameters: 123(Long), 张三(String), 2024-01-01 00:00:00(Timestamp)"></textare
 
       // 提取每个参数的值和类型
       const parsedParams = params.map(p => {
-        const match = p.match(/^(.+)$$([^)]+)$$$/); // 如 abc(String)
+        const match = p.match(/^(.+?)\(([^)]+)\)$/); // 如 abc(String)
         if (match) {
           let val = match[1].trim();
           const type = match[2].trim();
